@@ -1,11 +1,18 @@
 package com.byacht.retrofitdemo;
 
+import android.content.Intent;
+import android.support.design.widget.Snackbar;
+import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.StaggeredGridLayoutManager;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
 
+import com.byacht.retrofitdemo.activity.ZhihuDailyActivity;
 import com.byacht.retrofitdemo.adapter.MeiZhiAdapter;
 import com.byacht.retrofitdemo.api.MeiZhiApi;
 import com.byacht.retrofitdemo.entity.MeiZhi;
@@ -33,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
 
     @BindView(R.id.rv_meizhi)
     RecyclerView meizhiRv;
+    @BindView(R.id.refresh_layout)
+    SwipeRefreshLayout refreshLayout;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,10 +71,22 @@ public class MainActivity extends AppCompatActivity {
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 super.onScrolled(recyclerView, dx, dy);
                 if (isSlideToBottom(recyclerView)){
+                    refreshLayout.setRefreshing(true);
                     mPage++;
                     updateMeiZhiRv(meiZhiApi);
                 }
                 return;
+            }
+        });
+
+        refreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                mPage = 1;
+                mMeiZhis.clear();
+                mPhotoHeight.clear();
+                mAdapter.notifyDataSetChanged();
+                updateMeiZhiRv(meiZhiApi);
             }
         });
 
@@ -99,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void updateMeiZhiRv(MeiZhiApi meiZhiApi) {
+    private void updateMeiZhiRv(final MeiZhiApi meiZhiApi) {
         Call<MeiZhiData> call = meiZhiApi.getMeiZhi(mPage);
         call.enqueue(new Callback<MeiZhiData>() {
             @Override
@@ -110,14 +131,34 @@ public class MainActivity extends AppCompatActivity {
                 for (int i = 0; i < meiZhiData.getResults().size(); i++){
                     mPhotoHeight.add((int) (350 + Math.random() * 300));
                 }
-                mAdapter.notifyDataSetChanged();
+                mAdapter.notifyItemRangeChanged((mPage - 1) * 10, 10);
+                stopRefreshAnimation();
+
             }
 
             @Override
             public void onFailure(Call<MeiZhiData> call, Throwable t) {
-
+                stopRefreshAnimation();
+                Snackbar.make(meizhiRv, "加载失败，请检查网络状况", Snackbar.LENGTH_LONG)
+                        .setAction("重试", new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                updateMeiZhiRv(meiZhiApi);
+                            }
+                        })
+                        .show();
             }
         });
+
+    }
+
+    private void stopRefreshAnimation() {
+        refreshLayout.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                refreshLayout.setRefreshing(false);
+            }
+        }, 1000);
     }
 
     private boolean isSlideToBottom(RecyclerView recyclerView) {
@@ -125,5 +166,24 @@ public class MainActivity extends AppCompatActivity {
         if (recyclerView.computeVerticalScrollExtent() + recyclerView.computeVerticalScrollOffset() >= recyclerView.computeVerticalScrollRange())
             return true;
         return false;
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()){
+            case R.id.menu_zhihu:
+                Intent intent = new Intent(this, ZhihuDailyActivity.class);
+                startActivity(intent);
+                break;
+            default:
+                break;
+        }
+        return super.onOptionsItemSelected(item);
     }
 }
